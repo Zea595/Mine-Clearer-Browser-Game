@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mine Clearer</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+    <canvas id="demoCanvas" width="1024" height="768"></canvas>
+
+    <h1 id="game status">Don't step on the mines!</h1>
+    <h2 id = "instructionsHead">How to play:</h2>
+    <p id = "instructionsBody">
+        Move slowly around, mines within the blue circle will be detected. <br>
+        Do not touch the mines with the gray sweeper (circle), else game will end. <br>
+        Click once and wait 3 seconds to disarm the mines. <br>
+        Once mine turns green, then it is safe to walk over. <br>
+        Find all the mines, and check the counter below to see how many are left. <br>
+        </p>
+    <h1 id="mines count"></h1>
+
+    <script type="text/javascript">
+
+        var canvas = document.getElementById("demoCanvas");
+        var context = canvas.getContext("2d");
+        var img = new Image();
+        img.src = "images/explosion.jpg"
+
+        // SETUP AND INITIALIZATION OF ANIMATION AND GAME LOGIC GOES HERE
+        // global variable
+        var targetedMine;
+        let mineCount = 3;
+        
+
+        class MineField {
+            constructor(canvas, context, numMines, pointer) {
+                this.mines = [];
+                this.numMines = numMines;
+                this.pointer = pointer;
+
+                this.canvas = canvas;
+                this.context = context;
+
+                for(var i = 0; i < this.numMines; i++) {
+                    var rand1 = (Math.random() * canvas.width - 50) + 50;
+                    var rand2 = (Math.random() * canvas.height - 50) + 50;
+                    this.mines.push(new Mine(canvas, context, rand1, rand2));
+                }
+            }
+
+            checkMinesLeft() {
+                let minesLeft = 0;
+                
+                for(var i = 0; i < this.numMines; i++) {
+                    let thisMine = this.mines[i];
+                    if(thisMine.armed) {
+                        minesLeft++;
+                    }
+                }
+                return minesLeft;
+            }
+
+            handleMines() { 
+                // check if mines have collided with blue ring(wave)
+                for(var i = 0; i < this.numMines; i++) {
+                    let thisMine = this.mines[i];
+                    // if collided, add eventlistener
+                    if(thisMine.waveCollision(this.pointer) && thisMine.armed) {
+                        // set globa variable
+                        targetedMine = thisMine;
+                        thisMine.visible = "true";
+                        
+                        // if armed, add eventlistener for mousedown
+                        var timer;
+                        let holdTime = 3000;
+                        this.canvas.addEventListener("mousedown", down);                    
+                        function down(event) {
+                            targetedMine.setArmed("disarming");
+                            clearTimeout(this.timer);
+                            timer = setTimeout(function() {
+                                targetedMine.setArmed("disarmed");
+                                targetedMine = null;
+                            }, holdTime); 
+                        }       
+                    }
+                    
+                    if(thisMine.sweeperCollision(this.pointer) && thisMine.armed) {
+                        return true;
+                    }
+                }
+                // paint mines
+                for(var i = 0; i < this.numMines; i++) {
+                    this.mines[i].render();
+                }
+                return false;
+            }
+        }
+
+        class Mine {
+            constructor(canvas, context, x, y) {
+                this.x = x;
+                this.y = y;
+                this.fill = "red";
+                this.drawColor = "gray";
+                this.length = 50;
+                this.height = 50;
+
+                this.canvas = canvas;
+                this.context = context;
+
+                this.visible = false;
+                this.armed = true;
+            }
+
+            setArmed(state) {
+                switch(state) {
+                    case "armed":
+                        this.fill = "red";
+                        this.armed = true;
+                        break;
+                    case "disarming":
+                        this.fill = "yellow";
+                        break;
+                    case "disarmed": 
+                        this.fill = "#66ff33";
+                        this.armed = false;
+                        break;
+                }
+            }
+
+            // wave is the outer blue circle
+            waveCollision(sweeper) {
+                var pointerXLeft = sweeper.x + sweeper.radius;
+                var pointerXRight = sweeper.x - sweeper.radius;
+                var pointerYTop = sweeper.y + sweeper.radius;
+                var pointerYBottom = sweeper.y - sweeper.radius;
+                if(pointerXLeft < this.x || pointerXRight > this.x+this.length || 
+                    pointerYTop < this.y || pointerYBottom > this.y+this.height) {
+                    return false;
+                }
+                return true;
+            }
+            // sweeper is the gray circle in the middle
+            sweeperCollision(sweeper) {
+                var pointerXLeft = sweeper.x + sweeper.radius2;
+                var pointerXRight = sweeper.x - sweeper.radius2;
+                var pointerYTop = sweeper.y + sweeper.radius2;
+                var pointerYBottom = sweeper.y - sweeper.radius2;
+                if(pointerXLeft < this.x || pointerXRight > this.x+this.length || 
+                    pointerYTop < this.y || pointerYBottom > this.y+this.height) {
+                    return false;
+                }
+                return true;
+            }
+            
+            render() {
+                if(!this.visible) { return; }
+                this.context.strokeStyle = this.drawColor;
+                this.context.lineWidth = 5;
+
+                this.context.beginPath();
+                this.context.rect(this.x, this.y, this.length, this.height);
+                this.context.fillStyle = this.fill;
+                this.context.fillRect(this.x, this.y, this.length, this.height);
+                this.context.stroke();
+            }
+        }
+
+        // circle for sweeper around cursor
+        class Sweeper {
+            constructor(canvas, context, x, y, radius) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.radius2 = 20;
+
+                this.canvas = canvas;
+                this.context = context;
+            }
+
+            moveTo(x,y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            render() {
+                this.context.strokeStyle = "blue";
+                this.context.lineWidth = 5;
+
+                this.context.beginPath();
+                this.context.arc(this.x, this.y, this.radius, Math.PI*0, Math.PI*2);
+                this.context.stroke();
+
+                this.context.fillStyle = "gray";
+                this.context.strokeStyle = "gray";
+                this.context.beginPath();
+                this.context.arc(this.x, this.y, this.radius2, Math.PI*0, Math.PI*2);
+                this.context.fill();
+                this.context.stroke();
+            }
+        }
+
+        // ===============================================
+        
+        let mouseX = 0;
+        let mouseY = 0;
+        let sweeperRadius = 120;
+        
+
+        let canvasBox = canvas.getBoundingClientRect();
+
+        let pointer = new Sweeper(canvas, context, mouseX, mouseY, sweeperRadius);
+        canvas.addEventListener("mousemove", function(event) {
+            mouseX = event.clientX - canvasBox.left;
+            mouseY = event.clientY - canvasBox.top;
+        });
+
+        let mineField1 = new MineField(canvas, context, mineCount, pointer);
+
+        
+
+        
+
+        startGame();
+
+        function startGame()
+        {
+            updateGame();
+            window.requestAnimationFrame(drawGame);
+        }
+
+        function updateGame()
+        {
+            // GAME AND ANIMATION LOGIC GOES HERE
+            pointer.moveTo(mouseX,mouseY);
+
+            if(pointer.radius < sweeperRadius) {
+                pointer.radius += 4;
+            } else {
+                pointer.radius -= sweeperRadius;
+            }
+
+
+            // CHANGE THE NUMBER OF MILLISECONDS TO ADJUST FRAME RATE
+            window.setTimeout(updateGame, 30);
+        }
+
+        function drawGame()
+        {
+            context.clearRect(0,0,canvas.width,canvas.height);
+
+            document.getElementById("mines count").innerHTML = "Number of mines to disarm: " + mineField1.checkMinesLeft();
+            pointer.render();
+            if(mineField1.handleMines()) {
+                context.drawImage(img, 0, 0);
+                document.getElementById("game status").innerHTML = "GAME OVER! Refresh page to try again.";
+                exit(0);
+            }
+            if(mineField1.checkMinesLeft() == 0) {
+                document.getElementById("game status").innerHTML = "You Win! Refresh page to play again.";
+                exit(0);
+            }
+
+            window.requestAnimationFrame(drawGame);
+        }
+
+    </script>
+    
+</body>
+</html>
